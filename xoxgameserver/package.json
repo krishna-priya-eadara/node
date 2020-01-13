@@ -1,0 +1,12 @@
+{
+  "name": "node",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "npm": "node app.js"
+  },
+  "dependencies": {
+    "@types/node": "^13.1.6",
+    "ws": "^7.2.1"
+  }
+}
