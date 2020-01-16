@@ -1,50 +1,7 @@
 const WebSocketServer = require('ws').Server;
-const config = require('../Config.json');
+import { Logger } from "./logger";
+import { SOCKET_EVENTS, LOG_TYPES } from "./constants";
 
-const CONSTANTS = {
-    DEBUG: 'debug',
-    WARN: 'warn',
-    ERROR: 'error',
-    LOG: 'log'
-};
-const COLOR_REFERENCE = {
-    Reset: "\x1b[0m",
-    Bright: "\x1b[1m",
-    Dim: "\x1b[2m",
-    Underscore: "\x1b[4m",
-    Blink: "\x1b[5m",
-    Reverse: "\x1b[7m",
-    Hidden: "\x1b[8m",
-    fg: {
-        Black: "\x1b[30m",
-        Red: "\x1b[31m",
-        Green: "\x1b[32m",
-        Yellow: "\x1b[33m",
-        Blue: "\x1b[34m",
-        Magenta: "\x1b[35m",
-        Cyan: "\x1b[36m",
-        White: "\x1b[37m",
-        Crimson: "\x1b[38m"
-    },
-    bg: {
-        Black: "\x1b[40m",
-        Red: "\x1b[41m",
-        Green: "\x1b[42m",
-        Yellow: "\x1b[43m",
-        Blue: "\x1b[44m",
-        Magenta: "\x1b[45m",
-        Cyan: "\x1b[46m",
-        White: "\x1b[47m",
-        Crimson: "\x1b[48m"
-    }
-};
-const SOCKET_EVENTS = [
-    'message',
-    'error',
-    'close'
-];
-
-const LOG_PREFIX = '[SOCKET SERVER]:: ';
 
 const getUniqueID = function () {
     let dt = new Date().getTime();
@@ -57,50 +14,53 @@ const getUniqueID = function () {
     return uuid;
 };
 
-class ServerUtilities {
-    static clients: Array<any> = [];
-    static games: object;
+module ServerUtilities {
+    export let clients = {};
+    export let games = {};
 
-    static message(message) {
-        socketMessageFactory.processClientRequest(this, message);
-    }
-    static error(error) {
-        Logger.Log('Client connection error ' + this["id"] + '!!' + '\nError message: ' + error, CONSTANTS.LOG);
-    }
-    static close() {
-        delete ServerUtilities.clients[this["id"]];
-        Logger.Log('Client terminated ' + this["id"] + ' port!!', CONSTANTS.LOG);
-    }
-
-    static subscribe(context, eventName) {
-
-    }
-    static socketMessageListenerInit(socket) {
-        socket.on('connection', function(clientSocket) {
+    let events = {
+        message: function(message) {
+            SocketMessageFactory.processClientRequest(this, message);
+        },
+        error: function(error) {
+            Logger.Log('Client connection error ' + this["id"] + '!!' + '\nError message: ' + error, LOG_TYPES.LOG);
+        },
+        close: function() {
+            delete ServerUtilities.clients[this["id"]];
+            Logger.Log('Client terminated ' + this["id"] + ' port!!', LOG_TYPES.LOG);
+        },
+        connection: function(clientSocket) {
             clientSocket["id"] = getUniqueID();
-            ServerUtilities.clients[clientSocket["id"]] = clientSocket;
+            clients[clientSocket["id"]] = clientSocket;
             SOCKET_EVENTS.forEach((event) => {
-                clientSocket.on(event, ServerUtilities[event].bind(clientSocket));
+                clientSocket.on(event, events[event].bind(clientSocket));
             });
-        });
+        }
+    }
+
+    export function subscribe(context, eventName) {
+    }
+
+    export function socketMessageListenerInit(socket) {
+        socket.on('connection', events.connection.bind(this));
     }
 }
 
-class socketMessageFactory {
-    static processClientRequest(socketConnection, data) {
+module SocketMessageFactory {
+     export function processClientRequest(socketConnection, data) {
         data = JSON.parse(data);
         switch(data.event) {
             case 'clientInit' :
-                Logger.Log('Client connected ' + data.name + ' !!', CONSTANTS.LOG);
+                Logger.Log('Client connected ' + data.name + ' !!', LOG_TYPES.LOG);
                 ServerUtilities.clients[socketConnection["id"]].name = data.name;
                 break;
             case 'refreshConnections':
                 let availableConnections = [];
-                ServerUtilities.clients.forEach((item) => {
-                    if(item.id !== socketConnection.id) {
+                Object.values(ServerUtilities.clients).forEach((item) => {
+                    if(item["id"] !== socketConnection.id) {
                         availableConnections.push({
-                            name: item.name,
-                            id: item.id
+                            name: item["name"],
+                            id: item["id"]
                         });
                     }
                 });
@@ -167,33 +127,6 @@ class socketMessageFactory {
     }
 }
 
-class Logger {
-    static Log(message, type) {
-        MessengerFactory.writeConsoleMessage(message, type)
-    }
-}
-
-class MessengerFactory {
-    static writeConsoleMessage(message, type) {
-        switch(type) {
-            case CONSTANTS.DEBUG:
-                if(config.logLevel === CONSTANTS.DEBUG) {
-                    console.log( COLOR_REFERENCE.fg.Crimson + LOG_PREFIX + message + COLOR_REFERENCE.Reset);
-                }
-                break;
-            case CONSTANTS.ERROR:
-                console.log( COLOR_REFERENCE.fg.Red + LOG_PREFIX + message + COLOR_REFERENCE.Reset);
-                break;
-            case CONSTANTS.WARN:
-                console.log( COLOR_REFERENCE.fg.Yellow + LOG_PREFIX + message + COLOR_REFERENCE.Reset);
-                break;
-            case CONSTANTS.LOG:
-                console.log( COLOR_REFERENCE.fg.Blue + LOG_PREFIX + message + COLOR_REFERENCE.Reset);
-                break;
-        }
-    }
-}
-
 export class Server {
     portNumber: number;
     private _connection: any;
@@ -205,7 +138,7 @@ export class Server {
     on() {
         this._connection = new WebSocketServer({port: this.portNumber});
         ServerUtilities.socketMessageListenerInit(this._connection);
-        Logger.Log('Socket started at ' + this.portNumber + ' port!!', CONSTANTS.LOG);
+        Logger.Log('Socket started at ' + this.portNumber + ' port!!', LOG_TYPES.LOG);
     }
     off() {
         this._connection.close();

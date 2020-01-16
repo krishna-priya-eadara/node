@@ -12,50 +12,8 @@ var __assign = (this && this.__assign) || function () {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 var WebSocketServer = require('ws').Server;
-var config = require('../Config.json');
-var CONSTANTS = {
-    DEBUG: 'debug',
-    WARN: 'warn',
-    ERROR: 'error',
-    LOG: 'log'
-};
-var COLOR_REFERENCE = {
-    Reset: "\x1b[0m",
-    Bright: "\x1b[1m",
-    Dim: "\x1b[2m",
-    Underscore: "\x1b[4m",
-    Blink: "\x1b[5m",
-    Reverse: "\x1b[7m",
-    Hidden: "\x1b[8m",
-    fg: {
-        Black: "\x1b[30m",
-        Red: "\x1b[31m",
-        Green: "\x1b[32m",
-        Yellow: "\x1b[33m",
-        Blue: "\x1b[34m",
-        Magenta: "\x1b[35m",
-        Cyan: "\x1b[36m",
-        White: "\x1b[37m",
-        Crimson: "\x1b[38m"
-    },
-    bg: {
-        Black: "\x1b[40m",
-        Red: "\x1b[41m",
-        Green: "\x1b[42m",
-        Yellow: "\x1b[43m",
-        Blue: "\x1b[44m",
-        Magenta: "\x1b[45m",
-        Cyan: "\x1b[46m",
-        White: "\x1b[47m",
-        Crimson: "\x1b[48m"
-    }
-};
-var SOCKET_EVENTS = [
-    'message',
-    'error',
-    'close'
-];
-var LOG_PREFIX = '[SOCKET SERVER]:: ';
+var Logger_1 = require("./Logger");
+var Constants_1 = require("./Constants");
 var getUniqueID = function () {
     var dt = new Date().getTime();
     var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -65,50 +23,53 @@ var getUniqueID = function () {
     });
     return uuid;
 };
-var ServerUtilities = /** @class */ (function () {
-    function ServerUtilities() {
-    }
-    ServerUtilities.message = function (message) {
-        socketMessageFactory.processClientRequest(this, message);
-    };
-    ServerUtilities.error = function (error) {
-        Logger.Log('Client connection error ' + this["id"] + '!!' + '\nError message: ' + error, CONSTANTS.LOG);
-    };
-    ServerUtilities.close = function () {
-        delete ServerUtilities.clients[this["id"]];
-        Logger.Log('Client terminated ' + this["id"] + ' port!!', CONSTANTS.LOG);
-    };
-    ServerUtilities.subscribe = function (context, eventName) {
-    };
-    ServerUtilities.socketMessageListenerInit = function (socket) {
-        socket.on('connection', function (clientSocket) {
+var ServerUtilities;
+(function (ServerUtilities) {
+    ServerUtilities.clients = {};
+    ServerUtilities.games = {};
+    var events = {
+        message: function (message) {
+            SocketMessageFactory.processClientRequest(this, message);
+        },
+        error: function (error) {
+            Logger_1.Logger.Log('Client connection error ' + this["id"] + '!!' + '\nError message: ' + error, Constants_1.LOG_TYPES.LOG);
+        },
+        close: function () {
+            delete ServerUtilities.clients[this["id"]];
+            Logger_1.Logger.Log('Client terminated ' + this["id"] + ' port!!', Constants_1.LOG_TYPES.LOG);
+        },
+        connection: function (clientSocket) {
             clientSocket["id"] = getUniqueID();
             ServerUtilities.clients[clientSocket["id"]] = clientSocket;
-            SOCKET_EVENTS.forEach(function (event) {
-                clientSocket.on(event, ServerUtilities[event].bind(clientSocket));
+            Constants_1.SOCKET_EVENTS.forEach(function (event) {
+                clientSocket.on(event, events[event].bind(clientSocket));
             });
-        });
+        }
     };
-    ServerUtilities.clients = [];
-    return ServerUtilities;
-}());
-var socketMessageFactory = /** @class */ (function () {
-    function socketMessageFactory() {
+    function subscribe(context, eventName) {
     }
-    socketMessageFactory.processClientRequest = function (socketConnection, data) {
+    ServerUtilities.subscribe = subscribe;
+    function socketMessageListenerInit(socket) {
+        socket.on('connection', events.connection.bind(this));
+    }
+    ServerUtilities.socketMessageListenerInit = socketMessageListenerInit;
+})(ServerUtilities || (ServerUtilities = {}));
+var SocketMessageFactory;
+(function (SocketMessageFactory) {
+    function processClientRequest(socketConnection, data) {
         data = JSON.parse(data);
         switch (data.event) {
             case 'clientInit':
-                Logger.Log('Client connected ' + data.name + ' !!', CONSTANTS.LOG);
+                Logger_1.Logger.Log('Client connected ' + data.name + ' !!', Constants_1.LOG_TYPES.LOG);
                 ServerUtilities.clients[socketConnection["id"]].name = data.name;
                 break;
             case 'refreshConnections':
                 var availableConnections_1 = [];
-                ServerUtilities.clients.forEach(function (item) {
-                    if (item.id !== socketConnection.id) {
+                Object.values(ServerUtilities.clients).forEach(function (item) {
+                    if (item["id"] !== socketConnection.id) {
                         availableConnections_1.push({
-                            name: item.name,
-                            id: item.id
+                            name: item["name"],
+                            id: item["id"]
                         });
                     }
                 });
@@ -165,40 +126,9 @@ var socketMessageFactory = /** @class */ (function () {
                 }));
                 break;
         }
-    };
-    return socketMessageFactory;
-}());
-var Logger = /** @class */ (function () {
-    function Logger() {
     }
-    Logger.Log = function (message, type) {
-        MessengerFactory.writeConsoleMessage(message, type);
-    };
-    return Logger;
-}());
-var MessengerFactory = /** @class */ (function () {
-    function MessengerFactory() {
-    }
-    MessengerFactory.writeConsoleMessage = function (message, type) {
-        switch (type) {
-            case CONSTANTS.DEBUG:
-                if (config.logLevel === CONSTANTS.DEBUG) {
-                    console.log(COLOR_REFERENCE.fg.Crimson + LOG_PREFIX + message + COLOR_REFERENCE.Reset);
-                }
-                break;
-            case CONSTANTS.ERROR:
-                console.log(COLOR_REFERENCE.fg.Red + LOG_PREFIX + message + COLOR_REFERENCE.Reset);
-                break;
-            case CONSTANTS.WARN:
-                console.log(COLOR_REFERENCE.fg.Yellow + LOG_PREFIX + message + COLOR_REFERENCE.Reset);
-                break;
-            case CONSTANTS.LOG:
-                console.log(COLOR_REFERENCE.fg.Blue + LOG_PREFIX + message + COLOR_REFERENCE.Reset);
-                break;
-        }
-    };
-    return MessengerFactory;
-}());
+    SocketMessageFactory.processClientRequest = processClientRequest;
+})(SocketMessageFactory || (SocketMessageFactory = {}));
 var Server = /** @class */ (function () {
     function Server(port) {
         this.portNumber = port;
@@ -206,7 +136,7 @@ var Server = /** @class */ (function () {
     Server.prototype.on = function () {
         this._connection = new WebSocketServer({ port: this.portNumber });
         ServerUtilities.socketMessageListenerInit(this._connection);
-        Logger.Log('Socket started at ' + this.portNumber + ' port!!', CONSTANTS.LOG);
+        Logger_1.Logger.Log('Socket started at ' + this.portNumber + ' port!!', Constants_1.LOG_TYPES.LOG);
     };
     Server.prototype.off = function () {
         this._connection.close();
